@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Ruang Yuan</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root{color-scheme:dark;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:#0D1117;font-family:'IBM Plex Mono',monospace;}
+  input[type=number]::-webkit-inner-spin-button{opacity:.4}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState, useMemo, useEffect} = React;
+
+const T = {
+  bg:"#0D1117", panel:"#141B22", panelAlt:"#0F151B", border:"#232C36",
+  text:"#E4E7EB", textDim:"#75808D", textFaint:"#4A5460",
+  gold:"#C9A15C", goldDim:"#8A7245", red:"#D9695F", redDim:"#8F4A45",
+  teal:"#5FA89E", tealDim:"#3D6D65", amber:"#D9954A", green:"#22D67A",
+};
+const panelSty = {background:T.panel, border:`1px solid ${T.border}`, borderRadius:20, padding:18, boxShadow:"0 8px 24px rgba(0,0,0,.4)"};
+const inputSty = {width:"100%", background:T.panelAlt, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 10px", color:T.text, fontFamily:"'IBM Plex Mono',monospace", fontSize:14, outline:"none"};
+
+function fmt(n, d) {
+  if (n===null||n===undefined||isNaN(n)) return "—";
+  const dec = d!==undefined ? d : Math.abs(n)>=100?2:Math.abs(n)>=1?4:5;
+  return n.toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
+function ls_get(key){ try { const v = localStorage.getItem(key); return v?JSON.parse(v):null; } catch(e){ return null; } }
+function ls_set(key, val){ try { localStorage.setItem(key, JSON.stringify(val)); } catch(e){} }
+
+function Field({label, value, onChange, placeholder}) {
+  return <div style={{flex:1}}>
+    <div style={{color:T.textDim, fontSize:11, marginBottom:5}}>{label}</div>
+    <input type="number" inputMode="decimal" value={value} placeholder={placeholder}
+      onChange={e=>onChange(e.target.value)} style={inputSty}/>
+  </div>;
+}
+function Row({label, value}) {
+  return <div style={{display:"flex", justifyContent:"space-between", padding:"7px 2px", borderBottom:`1px solid ${T.border}`}}>
+    <span style={{color:T.textDim, fontSize:12}}>{label}</span>
+    <span style={{color:T.text, fontSize:12.5, fontWeight:500}}>{value}</span>
+  </div>;
+}
+function PlanRow({label, value, color}) {
+  return <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 10px", marginBottom:3, borderRadius:6, background:T.panelAlt}}>
+    <span style={{fontSize:11.5, color:T.textDim}}>{label}</span>
+    <span style={{fontSize:13, fontWeight:700, color}}>{value}</span>
+  </div>;
+}
+function DirBtn({active,onClick,label,color}) {
+  return <button onClick={onClick} style={{flex:1, padding:"9px 6px", borderRadius:8, border:`1px solid ${active?color:T.border}`,
+    background:active?`${color}22`:"transparent", color:active?color:T.textDim, fontFamily:"'IBM Plex Mono',monospace", fontSize:11, fontWeight:600, cursor:"pointer"}}>{label}</button>;
+}
+
+const FIB_LEVELS=[0,0.236,0.382,0.5,0.618,0.786,1];
+const FIB_EXT=[1.272,1.618];
+
+function FibPanel() {
+  const [high,setHigh]=useState(""), [low,setLow]=useState(""), [dir,setDir]=useState("bullish"), [cur,setCurS]=useState("");
+  const H=parseFloat(high), L=parseFloat(low), valid=!isNaN(H)&&!isNaN(L)&&H>L, range=valid?H-L:0;
+  const curNum = parseFloat(cur);
+  const levels = useMemo(()=>{
+    if(!valid) return [];
+    return [...FIB_LEVELS,...FIB_EXT].map(r=>({ratio:r, price: dir==="bullish"?H-r*range:L+r*range, isExt:r>1, isGolden:r===0.618||r===0.786}));
+  },[H,L,dir,valid,range]);
+  const zoneMin = valid ? Math.min(levels.find(l=>l.ratio===0.618)?.price, levels.find(l=>l.ratio===0.786)?.price) : null;
+  const zoneMax = valid ? Math.max(levels.find(l=>l.ratio===0.618)?.price, levels.find(l=>l.ratio===0.786)?.price) : null;
+  const inZone = valid && !isNaN(curNum) && curNum>=zoneMin && curNum<=zoneMax;
+  const plan = useMemo(()=>{
+    if(!valid) return null;
+    const buffer = range*0.05;
+    const l382 = levels.find(l=>l.ratio===0.382)?.price, l0 = levels.find(l=>l.ratio===0)?.price;
+    if (dir==="bullish"){ const sl=L-buffer; const cl=(zoneMin+sl)/2; return {bias:"BUY", sl, cl, tp1:l382, tp2:l0}; }
+    const sl=H+buffer; const cl=(zoneMax+sl)/2; return {bias:"SELL", sl, cl, tp1:l382, tp2:l0};
+  },[valid,dir,levels,zoneMin,zoneMax,L,H,range]);
+
+  return <div style={panelSty}>
+    <div style={{display:"flex",gap:8,marginBottom:14}}>
+      <DirBtn active={dir==="bullish"} onClick={()=>setDir("bullish")} label="Retrace turun (tren naik)" color={T.gold}/>
+      <DirBtn active={dir==="bearish"} onClick={()=>setDir("bearish")} label="Retrace naik (tren turun)" color={T.red}/>
+    </div>
+    <div style={{display:"flex",gap:10,marginBottom:10}}>
+      <Field label="Swing High" value={high} onChange={setHigh} placeholder="1.34500"/>
+      <Field label="Swing Low" value={low} onChange={setLow} placeholder="1.33200"/>
+    </div>
+    <div style={{marginBottom:14}}><Field label="Harga sekarang (opsional, buat cek alert)" value={cur} onChange={setCurS} placeholder="1.34000"/></div>
+    {!valid ? <div style={{color:T.textFaint,fontSize:12.5,padding:"16px 0",textAlign:"center"}}>Isi High & Low (High &gt; Low).</div> : <div>
+      {!isNaN(curNum) && <div style={{padding:"9px 12px",marginBottom:12,borderRadius:8,background:inZone?T.gold:T.panelAlt,color:inZone?T.bg:T.textDim,fontSize:11.5,fontWeight:inZone?700:400}}>
+        {inZone ? "🔔 Harga sekarang ada di golden zone" : `Belum di golden zone (${fmt(zoneMin)}–${fmt(zoneMax)})`}
+      </div>}
+      {levels.map(lv=>
+        <div key={lv.ratio} style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",marginBottom:4,borderRadius:6,background:lv.isGolden?"rgba(201,161,92,.08)":"transparent",border:lv.isGolden?`1px solid ${T.goldDim}`:"1px solid transparent"}}>
+          <span style={{color:lv.isGolden?T.gold:lv.isExt?T.teal:T.textDim,fontSize:12.5,fontWeight:lv.isGolden?600:400}}>{lv.ratio.toFixed(3)}{lv.isExt?" ext":""}</span>
+          <span style={{color:lv.isGolden?T.gold:T.text,fontSize:14,fontWeight:lv.isGolden?700:500}}>{fmt(lv.price)}</span>
+        </div>)}
+      <div style={{marginTop:14,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
+        <div style={{fontSize:11,color:T.textFaint,marginBottom:8}}>Trade plan ({plan.bias})</div>
+        <PlanRow label="Cut loss (early warning)" value={fmt(plan.cl)} color={T.amber}/>
+        <PlanRow label="Stop loss (hard)" value={fmt(plan.sl)} color={T.red}/>
+        <PlanRow label="Take profit 1" value={fmt(plan.tp1)} color={T.teal}/>
+        <PlanRow label="Take profit 2" value={fmt(plan.tp2)} color={T.teal}/>
+      </div>
+    </div>}
+  </div>;
+}
+
+const PATTERNS = {
+  gartley:{label:"Gartley", xa_d:[0.786,0.786], bc_cd:[1.13,1.618]},
+  bat:{label:"Bat", xa_d:[0.886,0.886], bc_cd:[1.618,2.618]},
+  butterfly:{label:"Butterfly", xa_d:[1.27,1.618], bc_cd:[1.618,2.618]},
+  crab:{label:"Crab", xa_d:[1.618,1.618], bc_cd:[2.24,3.618]},
+};
+function computeHarmonic(X,A,B,C,key){
+  const p=PATTERNS[key];
+  if ([X,A,B,C].some(v=>v===""||v===null||isNaN(v))) return null;
+  const xaUp=A>X, XA=A-X, BC=C-B;
+  const [xaLo,xaHi]=p.xa_d, dXlo=A-xaLo*XA, dXhi=A-xaHi*XA;
+  const [bcLo,bcHi]=p.bc_cd, dBlo=C-bcLo*BC, dBhi=C-bcHi*BC;
+  const all=[dXlo,dXhi,dBlo,dBhi], przLow=Math.min(...all), przHigh=Math.max(...all), przMid=(przLow+przHigh)/2;
+  const buffer=Math.abs(XA)*0.05, bias=xaUp?"SELL":"BUY", sl=xaUp?X+buffer:X-buffer;
+  const cl=xaUp?(przHigh+sl)/2:(przLow+sl)/2;
+  const tp1=xaUp?przMid-0.382*(przMid-A):przMid+0.382*(A-przMid);
+  const tp2=xaUp?przMid-0.618*(przMid-A):przMid+0.618*(A-przMid);
+  return {bias,cl,sl,tp1,tp2,przLow,przHigh,przMid};
+}
+function HarmonicPanel(){
+  const [pattern,setPattern]=useState("gartley");
+  const [X,setX]=useState(""),[A,setA]=useState(""),[B,setB]=useState(""),[C,setC]=useState("");
+  const result = useMemo(()=>computeHarmonic(parseFloat(X),parseFloat(A),parseFloat(B),parseFloat(C),pattern),[X,A,B,C,pattern]);
+  return <div style={panelSty}>
+    <div style={{marginBottom:14}}>
+      <div style={{color:T.textDim,fontSize:11,marginBottom:5}}>Pattern</div>
+      <select value={pattern} onChange={e=>setPattern(e.target.value)} style={inputSty}>
+        {Object.entries(PATTERNS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+      </select>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+      <Field label="X" value={X} onChange={setX} placeholder="1.3200"/>
+      <Field label="A" value={A} onChange={setA} placeholder="1.3450"/>
+      <Field label="B" value={B} onChange={setB} placeholder="1.3310"/>
+      <Field label="C" value={C} onChange={setC} placeholder="1.3400"/>
+    </div>
+    {!result ? <div style={{color:T.textFaint,fontSize:12.5,padding:"16px 0",textAlign:"center"}}>Isi X, A, B, C buat proyeksi PRZ.</div> : <div>
+      <div style={{padding:"12px 14px",background:"rgba(201,161,92,.08)",border:`1px solid ${T.goldDim}`,borderRadius:10,marginBottom:12}}>
+        <div style={{color:T.textDim,fontSize:10.5,marginBottom:4}}>PRZ ({result.bias})</div>
+        <div style={{color:T.gold,fontSize:18,fontWeight:700}}>{fmt(result.przLow)} – {fmt(result.przHigh)}</div>
+      </div>
+      <PlanRow label="Cut loss (early warning)" value={fmt(result.cl)} color={T.amber}/>
+      <PlanRow label="Stop loss (dekat X)" value={fmt(result.sl)} color={T.red}/>
+      <PlanRow label="Take profit 1" value={fmt(result.tp1)} color={T.teal}/>
+      <PlanRow label="Take profit 2" value={fmt(result.tp2)} color={T.teal}/>
+    </div>}
+  </div>;
+}
+
+function RiskPanel(){
+  const [mode,setMode]=useState("umum");
+  return <div>
+    <div style={{display:"flex",gap:8,marginBottom:12}}>
+      <DirBtn active={mode==="umum"} onClick={()=>setMode("umum")} label="Umum (saham/crypto)" color={T.gold}/>
+      <DirBtn active={mode==="forex"} onClick={()=>setMode("forex")} label="Forex (lot & pip)" color={T.teal}/>
+    </div>
+    {mode==="umum" ? <GenericRisk/> : <ForexLot/>}
+  </div>;
+}
+function GenericRisk(){
+  const [modal,setModal]=useState(""),[riskPct,setRiskPct]=useState("1"),[entry,setEntry]=useState(""),[sl,setSl]=useState("");
+  const M=parseFloat(modal),R=parseFloat(riskPct),E=parseFloat(entry),S=parseFloat(sl);
+  const valid=!isNaN(M)&&!isNaN(R)&&!isNaN(E)&&!isNaN(S)&&M>0&&R>0&&E!==S;
+  const plan=useMemo(()=>{ if(!valid) return null; const riskAmount=M*(R/100), distance=Math.abs(E-S), positionSize=riskAmount/distance, exposure=positionSize*E;
+    return {riskAmount,distance,positionSize,exposure,lev:exposure/M}; },[valid,M,R,E,S]);
+  return <div style={panelSty}>
+    <div style={{display:"flex",gap:10,marginBottom:10}}><Field label="Modal (Rp)" value={modal} onChange={setModal} placeholder="10000000"/><Field label="Risiko/trade (%)" value={riskPct} onChange={setRiskPct} placeholder="1"/></div>
+    <div style={{display:"flex",gap:10,marginBottom:16}}><Field label="Harga entry" value={entry} onChange={setEntry} placeholder="720"/><Field label="Stop loss" value={sl} onChange={setSl} placeholder="690"/></div>
+    {!valid ? <div style={{color:T.textFaint,fontSize:12.5,padding:"14px 0",textAlign:"center"}}>Isi semua kolom.</div> : <div>
+      <div style={{padding:"12px 14px",background:"rgba(201,161,92,.08)",border:`1px solid ${T.goldDim}`,borderRadius:10,marginBottom:12}}>
+        <div style={{color:T.textDim,fontSize:10.5,marginBottom:4}}>Risiko kalau kena SL</div>
+        <div style={{color:T.gold,fontSize:20,fontWeight:700}}>Rp{fmt(plan.riskAmount,0)}</div>
+      </div>
+      <Row label="Besar posisi (unit/lembar)" value={fmt(plan.positionSize,2)}/>
+      <Row label="Total eksposur" value={`Rp${fmt(plan.exposure,0)}`}/>
+      <Row label="Eksposur vs modal" value={`${fmt(plan.lev,2)}x`}/>
+    </div>}
+  </div>;
+}
+function ForexLot(){
+  const [modal,setModal]=useState(""),[riskPct,setRiskPct]=useState("1"),[pair,setPair]=useState("GBPUSD"),[entry,setEntry]=useState(""),[sl,setSl]=useState(""),[manual,setManual]=useState("");
+  const p=pair.trim().toUpperCase().replace("/",""), base=p.slice(0,3), quote=p.slice(3,6), pipSize=quote==="JPY"?0.01:0.0001;
+  const M=parseFloat(modal),R=parseFloat(riskPct),E=parseFloat(entry),S=parseFloat(sl),man=parseFloat(manual);
+  let autoPip=null;
+  if (p.length===6 && !isNaN(E) && E>0){ if(quote==="USD") autoPip=10; else if(base==="USD") autoPip=(100000*pipSize)/E; }
+  const pipValue = !isNaN(man)&&man>0 ? man : autoPip;
+  const needsManual = p.length===6 && quote!=="USD" && base!=="USD";
+  const valid = p.length===6 && !isNaN(M)&&!isNaN(R)&&!isNaN(E)&&!isNaN(S)&&M>0&&R>0&&E!==S&&pipValue!==null&&pipValue>0;
+  const calc=useMemo(()=>{ if(!valid) return null; const riskAmount=M*(R/100), pips=Math.abs(E-S)/pipSize, lots=riskAmount/(pips*pipValue);
+    return {riskAmount,pips,lots,mini:lots*10,micro:lots*100}; },[valid,M,R,E,S,pipSize,pipValue]);
+  return <div style={panelSty}>
+    <div style={{display:"flex",gap:10,marginBottom:10}}><Field label="Modal (USD)" value={modal} onChange={setModal} placeholder="1000"/><Field label="Risiko/trade (%)" value={riskPct} onChange={setRiskPct} placeholder="1"/></div>
+    <div style={{marginBottom:10}}><div style={{color:T.textDim,fontSize:11,marginBottom:5}}>Pair</div><input value={pair} onChange={e=>setPair(e.target.value.toUpperCase())} style={inputSty}/></div>
+    <div style={{display:"flex",gap:10,marginBottom:10}}><Field label="Harga entry" value={entry} onChange={setEntry} placeholder="1.34500"/><Field label="Stop loss" value={sl} onChange={setSl} placeholder="1.34000"/></div>
+    {needsManual && <div style={{marginBottom:10}}><Field label={`Pip value/lot (USD) — pair silang ${p}`} value={manual} onChange={setManual} placeholder="misal 6.5"/></div>}
+    {!valid ? <div style={{color:T.textFaint,fontSize:12.5,padding:"14px 0",textAlign:"center"}}>Isi semua kolom (entry ≠ SL).</div> : <div>
+      <div style={{padding:"12px 14px",background:"rgba(201,161,92,.08)",border:`1px solid ${T.goldDim}`,borderRadius:10,marginBottom:12}}>
+        <div style={{color:T.textDim,fontSize:10.5,marginBottom:4}}>Ukuran posisi</div><div style={{color:T.gold,fontSize:22,fontWeight:700}}>{fmt(calc.lots,2)} lot</div>
+      </div>
+      <Row label="Risiko" value={`$${fmt(calc.riskAmount,2)}`}/><Row label="Jarak SL" value={`${fmt(calc.pips,1)} pip`}/>
+      <Row label="Mini lot" value={fmt(calc.mini,1)}/><Row label="Micro lot" value={fmt(calc.micro,0)}/>
+    </div>}
+  </div>;
+}
+
+function computePivots(H,L,C,method){
+  const rng=H-L, pp=(H+L+C)/3;
+  if (method==="fibonacci") return [{l:"R3",p:pp+rng,t:"r"},{l:"R2",p:pp+0.618*rng,t:"r"},{l:"R1",p:pp+0.382*rng,t:"r"},{l:"PP",p:pp,t:"pp"},{l:"S1",p:pp-0.382*rng,t:"s"},{l:"S2",p:pp-0.618*rng,t:"s"},{l:"S3",p:pp-rng,t:"s"}];
+  if (method==="camarilla") return [{l:"R4",p:C+(rng*1.1)/2,t:"r"},{l:"R3",p:C+(rng*1.1)/4,t:"r"},{l:"R2",p:C+(rng*1.1)/6,t:"r"},{l:"R1",p:C+(rng*1.1)/12,t:"r"},{l:"S1",p:C-(rng*1.1)/12,t:"s"},{l:"S2",p:C-(rng*1.1)/6,t:"s"},{l:"S3",p:C-(rng*1.1)/4,t:"s"},{l:"S4",p:C-(rng*1.1)/2,t:"s"}];
+  return [{l:"R3",p:H+2*(pp-L),t:"r"},{l:"R2",p:pp+rng,t:"r"},{l:"R1",p:2*pp-L,t:"r"},{l:"PP",p:pp,t:"pp"},{l:"S1",p:2*pp-H,t:"s"},{l:"S2",p:pp-rng,t:"s"},{l:"S3",p:L-2*(H-pp),t:"s"}];
+}
+function PivotPanel(){
+  const [high,setHigh]=useState(""),[low,setLow]=useState(""),[close,setClose]=useState(""),[method,setMethod]=useState("classic");
+  const H=parseFloat(high),L=parseFloat(low),C=parseFloat(close),valid=!isNaN(H)&&!isNaN(L)&&!isNaN(C)&&H>L;
+  const levels=useMemo(()=>valid?computePivots(H,L,C,method):[],[valid,H,L,C,method]);
+  const colorFor=t=>t==="r"?T.red:t==="s"?T.teal:T.gold;
+  return <div style={panelSty}>
+    <div style={{display:"flex",gap:6,marginBottom:14}}>
+      {[["classic","Classic"],["fibonacci","Fibonacci"],["camarilla","Camarilla"]].map(([k,lbl])=>
+        <button key={k} onClick={()=>setMethod(k)} style={{flex:1,padding:"8px 0",borderRadius:10,border:`1px solid ${method===k?T.green:T.border}`,background:method===k?"rgba(34,214,122,.12)":"transparent",color:method===k?T.green:T.textDim,fontFamily:"'IBM Plex Mono',monospace",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{lbl}</button>)}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+      <Field label="High" value={high} onChange={setHigh} placeholder="0"/><Field label="Low" value={low} onChange={setLow} placeholder="0"/><Field label="Close" value={close} onChange={setClose} placeholder="0"/>
+    </div>
+    {!valid ? <div style={{color:T.textFaint,fontSize:12.5,padding:"14px 0",textAlign:"center"}}>Isi High, Low, Close.</div> : levels.map(lv=>
+      <div key={lv.l} style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",marginBottom:4,borderRadius:8,background:lv.t==="pp"?"rgba(201,161,92,.08)":"transparent",borderLeft:`3px solid ${colorFor(lv.t)}`}}>
+        <span style={{fontSize:12.5,fontWeight:700,color:colorFor(lv.t)}}>{lv.l}</span><span style={{fontSize:14,fontWeight:600,color:T.text}}>{fmt(lv.p)}</span>
+      </div>)}
+  </div>;
+}
+
+function daysDiff(d){ const t=new Date(); t.setHours(0,0,0,0); return Math.round((new Date(d+"T00:00:00")-t)/86400000); }
+function CyclePanel(){
+  const [entries,setEntries]=useState(()=>ls_get("cycle_notes")||[]);
+  const [date,setDate]=useState(""),[inst,setInst]=useState(""),[note,setNote]=useState("");
+  useEffect(()=>ls_set("cycle_notes",entries),[entries]);
+  const add=()=>{ if(!date||!note.trim()) return; const e={id:Date.now().toString(),date,instrument:inst.trim().toUpperCase(),note:note.trim()};
+    setEntries([...entries,e].sort((a,b)=>a.date.localeCompare(b.date))); setDate("");setInst("");setNote(""); };
+  const remove=id=>setEntries(entries.filter(e=>e.id!==id));
+  return <div style={panelSty}>
+    <div style={{display:"flex",gap:8,marginBottom:8}}>
+      <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...inputSty,flex:1,colorScheme:"dark"}}/>
+      <input value={inst} onChange={e=>setInst(e.target.value.toUpperCase())} placeholder="Instrumen" style={{...inputSty,flex:1}}/>
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <input value={note} onChange={e=>setNote(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="Catatan cycle" style={{...inputSty,flex:1}}/>
+      <button onClick={add} style={{width:34,borderRadius:8,border:`1px solid ${T.goldDim}`,background:"rgba(201,161,92,.1)",color:T.gold,cursor:"pointer"}}>+</button>
+    </div>
+    {entries.length===0 ? <div style={{color:T.textFaint,fontSize:12.5,textAlign:"center",padding:"14px 0"}}>Belum ada catatan.</div> :
+      entries.map(e=>{ const diff=daysDiff(e.date), isPast=diff<0, isNear=diff>=0&&diff<=3;
+        return <div key={e.id} style={{display:"flex",justifyContent:"space-between",padding:"10px 12px",marginBottom:6,borderRadius:8,background:isNear?"rgba(217,149,74,.08)":T.panelAlt,opacity:isPast?0.55:1}}>
+          <div><div style={{fontSize:12,color:T.text,fontWeight:600}}>{e.date} {e.instrument&&<span style={{color:T.gold}}>· {e.instrument}</span>} <span style={{fontSize:10,color:isNear?T.amber:T.textFaint}}>· {isPast?`lewat ${Math.abs(diff)}h`:diff===0?"hari ini":`${diff}h lagi`}</span></div>
+          <div style={{fontSize:12,color:T.textDim}}>{e.note}</div></div>
+          <button onClick={()=>remove(e.id)} style={{border:"none",background:"transparent",color:T.textFaint,cursor:"pointer"}}>✕</button>
+        </div>; })}
+  </div>;
+}
+
+function JournalPanel(){
+  const [entries,setEntries]=useState(()=>ls_get("trade_journal")||[]);
+  const [inst,setInst]=useState(""),[dir,setDir]=useState("BUY"),[entry,setEntry]=useState(""),[sl,setSl]=useState(""),[tp,setTp]=useState(""),[note,setNote]=useState("");
+  useEffect(()=>ls_set("trade_journal",entries),[entries]);
+  const add=()=>{ if(!inst.trim()||!entry) return;
+    setEntries([{id:Date.now().toString(),date:new Date().toISOString().slice(0,10),instrument:inst.trim().toUpperCase(),direction:dir,entry,sl,tp,note:note.trim(),status:"open"},...entries]);
+    setInst("");setEntry("");setSl("");setTp("");setNote(""); };
+  const setStatus=(id,status)=>setEntries(entries.map(e=>e.id===id?{...e,status}:e));
+  const remove=id=>setEntries(entries.filter(e=>e.id!==id));
+  const closed=entries.filter(e=>e.status!=="open"), wins=entries.filter(e=>e.status==="win").length;
+  const winRate = closed.length>0 ? (wins/closed.length)*100 : null;
+  const exportCsv=()=>{ if(entries.length===0) return;
+    const rows=[["Tanggal","Instrumen","Arah","Entry","SL","TP","Status","Catatan"],...entries.map(e=>[e.date,e.instrument,e.direction,e.entry,e.sl,e.tp,e.status,(e.note||"").replace(/"/g,"'")])];
+    const csv=rows.map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
+    try{ navigator.clipboard.writeText(csv);}catch(e){}
+    const blob=new Blob([csv],{type:"text/csv"}); const url=URL.createObjectURL(blob); const a=document.createElement("a");
+    a.href=url; a.download=`journal-ruang-yuan-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
+  return <div style={panelSty}>
+    <div style={{display:"flex",gap:8,marginBottom:12}}>
+      <div style={{flex:1,padding:"8px 10px",borderRadius:8,background:T.panelAlt,textAlign:"center"}}><div style={{fontSize:9.5,color:T.textFaint}}>Total</div><div style={{fontSize:16,color:T.text,fontWeight:700}}>{entries.length}</div></div>
+      <div style={{flex:1,padding:"8px 10px",borderRadius:8,background:T.panelAlt,textAlign:"center"}}><div style={{fontSize:9.5,color:T.textFaint}}>Win rate</div><div style={{fontSize:16,color:winRate===null?T.textFaint:T.gold,fontWeight:700}}>{winRate===null?"—":`${fmt(winRate,0)}%`}</div></div>
+      <button onClick={exportCsv} style={{padding:"0 14px",borderRadius:8,border:`1px solid ${T.tealDim}`,background:"rgba(95,168,158,.1)",color:T.teal,fontSize:11,fontWeight:600,cursor:"pointer"}}>⤓ CSV</button>
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:8}}>
+      <input value={inst} onChange={e=>setInst(e.target.value.toUpperCase())} placeholder="Instrumen" style={{...inputSty,flex:1}}/>
+      <button onClick={()=>setDir(dir==="BUY"?"SELL":"BUY")} style={{width:72,borderRadius:8,border:`1px solid ${dir==="BUY"?T.goldDim:T.redDim}`,background:dir==="BUY"?"rgba(201,161,92,.1)":"rgba(217,105,95,.1)",color:dir==="BUY"?T.gold:T.red,fontWeight:700,cursor:"pointer"}}>{dir}</button>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
+      <Field label="Entry" value={entry} onChange={setEntry} placeholder="0"/><Field label="SL" value={sl} onChange={setSl} placeholder="0"/><Field label="TP" value={tp} onChange={setTp} placeholder="0"/>
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <input value={note} onChange={e=>setNote(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="Catatan" style={{...inputSty,flex:1}}/>
+      <button onClick={add} style={{width:34,borderRadius:8,border:`1px solid ${T.goldDim}`,background:"rgba(201,161,92,.1)",color:T.gold,cursor:"pointer"}}>+</button>
+    </div>
+    {entries.map(e=>{ const sc=e.status==="win"?T.gold:e.status==="loss"?T.red:T.teal, sl2=e.status==="win"?"WIN":e.status==="loss"?"LOSS":"OPEN";
+      return <div key={e.id} style={{padding:"10px 12px",marginBottom:6,borderRadius:8,background:T.panelAlt}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{fontSize:12.5,color:T.text,fontWeight:700}}>{e.instrument} <span style={{fontSize:10,color:e.direction==="BUY"?T.gold:T.red}}>{e.direction}</span> <span style={{fontSize:9.5,color:T.textFaint}}>{e.date}</span></span>
+          <span style={{fontSize:9.5,color:sc,fontWeight:700}}>{sl2}</span>
+        </div>
+        <div style={{fontSize:11,color:T.textDim,marginBottom:6}}>Entry {e.entry} · SL {e.sl||"—"} · TP {e.tp||"—"}</div>
+        <div style={{display:"flex",gap:6}}>
+          {e.status!=="win" && <button onClick={()=>setStatus(e.id,"win")} style={{fontSize:10,padding:"3px 8px",borderRadius:4,border:`1px solid ${T.goldDim}`,background:"transparent",color:T.gold,cursor:"pointer"}}>Win</button>}
+          {e.status!=="loss" && <button onClick={()=>setStatus(e.id,"loss")} style={{fontSize:10,padding:"3px 8px",borderRadius:4,border:`1px solid ${T.redDim}`,background:"transparent",color:T.red,cursor:"pointer"}}>Loss</button>}
+          <button onClick={()=>remove(e.id)} style={{marginLeft:"auto",border:"none",background:"transparent",color:T.textFaint,cursor:"pointer"}}>✕</button>
+        </div>
+      </div>; })}
+  </div>;
+}
+
+function App(){
+  const [tab,setTab]=useState("fib");
+  const tabs=[["fib","Retracement"],["harmonic","XABCD"],["risk","Risk Calc"],["pivot","Pivot S/R"],["cycle","Cycle"],["journal","Journal"]];
+  return <div style={{minHeight:"100vh",padding:"18px 14px 32px"}}>
+    <div style={{maxWidth:480,margin:"0 auto"}}>
+      <div style={{padding:"18px",background:T.panel,border:`1px solid ${T.border}`,borderRadius:22,boxShadow:"0 10px 28px rgba(0,0,0,.45)",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:46,height:46,borderRadius:14,background:T.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>⚡</div>
+          <div><div style={{color:T.textFaint,fontSize:11.5}}>Halo, Yuan 👋</div><div style={{color:T.text,fontSize:21,fontWeight:700,fontFamily:"'IBM Plex Sans',sans-serif"}}>Ruang Yuan</div></div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:18,overflowX:"auto",paddingBottom:4}}>
+        {tabs.map(([k,label])=>
+          <button key={k} onClick={()=>setTab(k)} style={{flex:"0 0 auto",padding:"9px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",fontSize:11.5,fontWeight:600,whiteSpace:"nowrap",background:tab===k?T.gold:T.panel,color:tab===k?T.bg:T.textDim}}>{label}</button>)}
+      </div>
+      {tab==="fib"?<FibPanel/>:tab==="harmonic"?<HarmonicPanel/>:tab==="risk"?<RiskPanel/>:tab==="pivot"?<PivotPanel/>:tab==="cycle"?<CyclePanel/>:<JournalPanel/>}
+      <div style={{marginTop:18,fontSize:10.5,color:T.textFaint,lineHeight:1.6,borderTop:`1px solid ${T.border}`,paddingTop:12}}>
+        Versi offline Ruang Yuan — data disimpan di browser ini (localStorage). Modul Saham/Forex/Crypto/News/Kalender/Tracker butuh Claude dan gak ada di versi HTML ini.
+      </div>
+    </div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
